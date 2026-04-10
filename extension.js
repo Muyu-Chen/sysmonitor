@@ -545,13 +545,13 @@ function getWebviewHtml(nonce) {
       document.getElementById('ssh-label').textContent = T.localSSH;
       document.getElementById('ssh-tx').textContent = d.ssh.txStr;
       document.getElementById('ssh-rx').textContent = d.ssh.rxStr;
-      pushHist(sshTxHist, d.ssh.tx || 0);
-      pushHist(sshRxHist, d.ssh.rx || 0);
+      pushHist(sshTxHist, d.ssh.rx || 0);
+      pushHist(sshRxHist, d.ssh.tx || 0);
       var sshMax = 1;
       sshTxHist.forEach(function(v) { if (v > sshMax) sshMax = v; });
       sshRxHist.forEach(function(v) { if (v > sshMax) sshMax = v; });
-      renderSpark(document.getElementById('ssh-spark-tx-area'), null, sshTxHist, sshMax, 'var(--accent)');
-      renderSpark(document.getElementById('ssh-spark-rx-area'), null, sshRxHist, sshMax, 'var(--warn)');
+      renderSpark(document.getElementById('ssh-spark-tx-area'), null, sshTxHist, sshMax, 'var(--warn)');
+      renderSpark(document.getElementById('ssh-spark-rx-area'), null, sshRxHist, sshMax, 'var(--accent)');
       document.getElementById('net-up-label').textContent = T.up;
       document.getElementById('net-down-label').textContent = T.down;
       document.getElementById('ssh-up-label').textContent = T.up;
@@ -617,8 +617,8 @@ function getWebviewHtml(nonce) {
     var netMax = 1;
     netTxHist.forEach(function(v) { if (v > netMax) netMax = v; });
     netRxHist.forEach(function(v) { if (v > netMax) netMax = v; });
-    renderSpark(document.getElementById('net-spark-tx-area'), null, netTxHist, netMax, 'var(--accent)');
-    renderSpark(document.getElementById('net-spark-rx-area'), null, netRxHist, netMax, 'var(--warn)');
+    renderSpark(document.getElementById('net-spark-tx-area'), null, netTxHist, netMax, 'var(--warn)');
+    renderSpark(document.getElementById('net-spark-rx-area'), null, netRxHist, netMax, 'var(--accent)');
 
     var freeCard = document.getElementById('free-gpu-card');
     if (d.gpus && d.gpus.length) {
