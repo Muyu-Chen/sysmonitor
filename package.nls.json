@@ -1,0 +1,8 @@
+{
+  "displayName": "System Monitor",
+  "description": "Real-time CPU / GPU / RAM / Network monitor",
+  "viewTitle": "System Monitor",
+  "viewName": "System Monitor",
+  "procsName": "Processes",
+  "cmdOpen": "System Monitor: Open Panel"
+}
