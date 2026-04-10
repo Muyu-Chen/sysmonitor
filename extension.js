@@ -107,13 +107,53 @@ function getSshTraffic() {
 
 const fmtBytes = (b) => b < 1e6 ? (b / 1024).toFixed(0) + ' KB/s' : (b / 1048576).toFixed(1) + ' MB/s';
 const fmtSize = (b) => b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : (b / 1048576).toFixed(0) + ' MB';
+const fmtDiskSize = (b) => b >= 1.0995116e12 ? (b / 1.0995116e12).toFixed(1) + 'T' : b >= 1073741824 ? (b / 1073741824).toFixed(1) + 'G' : b >= 1048576 ? (b / 1048576).toFixed(0) + 'M' : (b / 1024).toFixed(0) + 'K';
+
+let _diskCache = [];
+let _diskRefreshing = false;
+
+const VIRTUAL_FS = new Set(['tmpfs', 'devtmpfs', 'sysfs', 'proc', 'efivarfs', 'squashfs', 'cgroup', 'cgroup2', 'configfs', 'debugfs', 'devpts', 'fusectl', 'hugetlbfs', 'mqueue', 'pstore', 'securityfs', 'binfmt_misc', 'autofs', 'tracefs', 'ramfs']);
+
+function parseDfOutput(out, mountFilter) {
+  return out.trim().split('\n').slice(1).reduce((acc, line) => {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 7) return acc;
+    const [fs, fstype, blocks, used, , pctStr, ...mountParts] = parts;
+    const mount = mountParts.join(' ');
+    if (mountFilter === 'default') {
+      if (!fs.startsWith('/dev/')) return acc;
+      if (fstype === 'squashfs' || fstype === 'vfat') return acc;
+    } else if (mountFilter === 'more') {
+      if (VIRTUAL_FS.has(fstype)) return acc;
+    }
+    // 'all' → no filtering
+    const total = parseInt(blocks) * 1024;
+    const usedBytes = parseInt(used) * 1024;
+    const pct = parseInt(pctStr);
+    acc.push({ mount, total, used: usedBytes, pct: isNaN(pct) ? 0 : pct });
+    return acc;
+  }, []);
+}
+
+function refreshDiskCache(mountFilter = 'default', cb) {
+  if (_diskRefreshing) return;
+  _diskRefreshing = true;
+  const { exec } = require('child_process');
+  exec('df -PT --local 2>/dev/null', { timeout: 5000 }, (err, stdout) => {
+    _diskRefreshing = false;
+    if (!err && stdout) _diskCache = parseDfOutput(stdout, mountFilter);
+    if (cb) cb();
+  });
+}
+
+function getDiskInfo() { return _diskCache; }
 
 function getWebviewHtml(nonce) {
   return `<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style nonce="${nonce}">
   :root {
     --card-bg: var(--vscode-sideBar-background, #1e1e1e);
@@ -184,15 +224,31 @@ function getWebviewHtml(nonce) {
   .mem-inline span:nth-child(2) { color: var(--text); }
   .mem-inline span:nth-child(4) { color: var(--text); }
   .gpu-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  #disk-body { container-type: inline-size; }
+  .disk-item { margin-bottom: 8px; }
+  .disk-item:last-child { margin-bottom: 0; }
+  .disk-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .disk-mount { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+  .disk-info { flex: 0 0 auto; font-size: 10px; color: var(--muted); white-space: nowrap; display: flex; align-items: baseline; gap: 6px; }
+  .disk-footer { display: none; justify-content: space-between; align-items: baseline; margin-top: 2px; }
+  .disk-meta { font-size: 10px; color: var(--muted); }
+  .disk-pct { font-size: 10px; font-weight: 600; }
+  .disk-pct.warn { color: var(--warn); }
+  .disk-pct.danger { color: var(--danger); }
+  @container (max-width: 200px) {
+    .disk-info { display: none; }
+    .disk-footer { display: flex; }
+  }
   .gpu-mini { flex: 1 1 180px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
   .gpu-na { font-size: 11px; color: var(--muted); }
   .gpu-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 4px; }
   .gpu-name { font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-  .gpu-sub { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 2px; }
-  .bar-label span:last-child { color: var(--text); }
-  .gpu-stats { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 4px; }
-  .gpu-stats span { white-space: nowrap; }
+  .gpu-sub { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; cursor: default; }
+  .bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 2px; gap: 4px; overflow: hidden; }
+  .bar-label span:first-child { flex-shrink: 0; white-space: nowrap; }
+  .bar-label span:last-child { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .gpu-stats { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 4px; overflow: hidden; }
+  .gpu-stats span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .gpu-stats b { color: var(--text); font-weight: 500; }
   .gpu-link { font-size: 9px; color: var(--accent); cursor: pointer; opacity: .7; transition: opacity .15s; white-space: nowrap; }
   .gpu-link:hover { opacity: 1; text-decoration: underline; }
@@ -269,6 +325,10 @@ function getWebviewHtml(nonce) {
     <div class="sett-label" id="sett-bar-label">状态栏</div>
     <div id="sett-body"></div>
   </div>
+  <div class="sett-section">
+    <div class="sett-label" id="sett-disk-label">磁盘</div>
+    <div id="sett-disk-body"></div>
+  </div>
 </div>
 </div>
 
@@ -289,6 +349,11 @@ function getWebviewHtml(nonce) {
     <div class="detail-row"><span id="l-avail">可用</span><span id="mem-avail">--</span></div>
     <div class="detail-row"><span id="l-total">总计</span><span id="mem-total">--</span></div>
   </div>
+</div>
+
+<div class="card" id="disk-card" style="display:none">
+  <div class="card-head"><span class="card-label" id="disk-label">Disk</span></div>
+  <div id="disk-body"></div>
 </div>
 
 <div class="net-ssh-row">
@@ -361,6 +426,7 @@ function getWebviewHtml(nonce) {
           scopeOff:'关',scopeSummary:'总览',scopeCard:'指定卡',scopeMy:'我的卡',metUtil:'仅利用率',metVram:'仅显存',metBoth:'全部显示',
           netUp:'仅上传',netDown:'仅下载',netAll:'全部显示',netMerge:'合并显示',
           sshLabel:'SSH速率',gpuSummary:'GPU总览',gpuPerf:'GPU性能显示',gpuAll:'所有卡',gpuSpecify:'指定卡',gpuFirst:'前几张',gpuMetric:'GPU显示指标',gpuSkipIdle:'隐藏空闲卡',viewProcs:'查看进程',
+          diskLabel:'磁盘',diskNoData:'无磁盘数据',diskFilter:'挂载过滤',diskDefault:'默认',diskMore:'更多',diskAll:'全部',diskDefaultDesc:'仅 /dev/* 物理分区（排除 squashfs/vfat）',diskMoreDesc:'排除 tmpfs 等虚拟文件系统',diskAllDesc:'包含所有挂载点（含 tmpfs、/run 等）',
           pcpu:'CPU',pmem:'内存',pgpu:'GPU',ppid:'PID',puser:'用户',pname:'进程名',pcpuPct:'CPU%',pmemCol:'内存',pgpuCol:'GPU',pcount:'共 {n} 进程',pnoGpu:'—',pcmd:'命令',filterHint:'搜索进程...' }
       : { min:' min',cores:' cores',used:'Used',avail:'Avail',total:'Total',srvNet:'Server Net',net:'Network',localSSH:'Local SSH',up:'↑ Up',down:'↓ Down',selAll:'Select All',clear:'Clear',copyEnv:'Copy Env Var',detecting:'Detecting…',noGpu:'No NVIDIA GPU detected',updAt:'Updated ',utilLabel:'Util',memLabel:'VRAM',tempLabel:'Temp',pwLabel:'Power',
           perfTab:'Perf',procTab:'Procs',settBtn:'Settings',running:'Running',stopped:'Paused',enabled:'Enabled',disabled:'Disabled',settTitle:'Settings',interval:'Refresh Interval',statusBar:'Status Bar',barToggle:'Show Status Bar',close:'Close',
@@ -368,6 +434,7 @@ function getWebviewHtml(nonce) {
           scopeOff:'Off',scopeSummary:'Summary',scopeCard:'Card',scopeMy:'My Card',metUtil:'Util Only',metVram:'VRAM Only',metBoth:'All',
           netUp:'Upload',netDown:'Download',netAll:'All',netMerge:'Merged',
           sshLabel:'SSH Traffic',gpuSummary:'GPU Summary',gpuPerf:'GPU Performance',gpuAll:'All Cards',gpuSpecify:'Specific',gpuFirst:'First N',gpuMetric:'GPU Metric',gpuSkipIdle:'Hide Idle',viewProcs:'View Procs',
+          diskLabel:'Disk',diskNoData:'No disk data',diskFilter:'Mount Filter',diskDefault:'Default',diskMore:'More',diskAll:'All',diskDefaultDesc:'/dev/* partitions (excl. squashfs/vfat)',diskMoreDesc:'Exclude tmpfs and virtual FS',diskAllDesc:'All mount points (incl. tmpfs, /run, etc.)',
           pcpu:'CPU',pmem:'Memory',pgpu:'GPU',ppid:'PID',puser:'User',pname:'Process',pcpuPct:'CPU%',pmemCol:'Mem',pgpuCol:'GPU',pcount:'{n} processes',pnoGpu:'—',pcmd:'Command',filterHint:'Search...' };
     document.getElementById('l-1m').textContent = '1' + T.min;
     document.getElementById('l-5m').textContent = '5' + T.min;
@@ -375,6 +442,7 @@ function getWebviewHtml(nonce) {
     document.getElementById('l-used').textContent = T.used;
     document.getElementById('l-avail').textContent = T.avail;
     document.getElementById('l-total').textContent = T.total;
+    document.getElementById('disk-label').textContent = T.diskLabel;
     document.getElementById('select-all-btn').textContent = T.selAll;
     document.getElementById('clear-btn').textContent = T.clear;
     document.getElementById('copy-btn').textContent = T.copyEnv;
@@ -392,6 +460,7 @@ function getWebviewHtml(nonce) {
     var data = evt.data;
     if (data.cmd === 'config') {
       barCfg = data.barCfg || barCfg;
+      diskCfg = data.diskCfg || diskCfg;
       curInterval = data.interval || curInterval;
       gpuCount = data.gpuCount || gpuCount;
       if (modalOpen) renderSettingsBody();
@@ -417,6 +486,8 @@ function getWebviewHtml(nonce) {
     document.getElementById('mem-used').textContent = d.mem.usedStr;
     document.getElementById('mem-avail').textContent = d.mem.availStr;
     document.getElementById('mem-total').textContent = d.mem.totalStr;
+
+    renderDisk(d.disks);
 
     var sshCard = document.getElementById('ssh-card');
     var netTitle = document.getElementById('net-title');
@@ -445,14 +516,13 @@ function getWebviewHtml(nonce) {
         var mu = parseInt(g.memUsed) || 0;
         var mt = parseInt(g.memTotal) || 1;
         var memPct = Math.min(100, Math.round(mu / mt * 100));
-        var pwStr = g.power ? '<span>' + T.pwLabel + ' <b>' + g.power.draw + '/' + g.power.limit + ' W</b></span>' : '';
         ghtml += '<div class="gpu-mini">'
-          + '<div class="gpu-title"><span class="gpu-name">GPU ' + g.idx + '</span><span class="gpu-sub">' + g.name + '</span></div>'
+          + '<div class="gpu-title"><span class="gpu-name">GPU ' + g.idx + '</span><span class="gpu-sub" title="' + g.name + '">' + g.name + '</span></div>'
           + '<div class="bar-label"><span>' + T.utilLabel + '</span><span>' + util + '% <span class="gpu-link" data-gpu-link="' + g.idx + '">&nearr; ' + T.viewProcs + '</span></span></div>'
           + '<div class="track"><div class="fill ' + colorClass(util) + '" id="gpu-util-' + g.idx + '"></div></div>'
-          + '<div class="bar-label"><span>' + T.memLabel + '</span><span>' + mu + ' / ' + mt + ' MiB (' + memPct + '%)</span></div>'
+          + '<div class="bar-label"><span>' + T.memLabel + '</span><span title="' + mu + ' / ' + mt + ' MiB (' + memPct + '%)">' + mu + ' / ' + mt + ' MiB (' + memPct + '%)</span></div>'
           + '<div class="track"><div class="fill ' + colorClass(memPct) + '" id="gpu-mem-' + g.idx + '"></div></div>'
-          + '<div class="gpu-stats"><span>' + T.tempLabel + ' <b>' + (g.temp || 0) + ' °C</b></span>' + pwStr + '</div></div>';
+          + '<div class="gpu-stats"><span title="' + T.tempLabel + ' ' + (g.temp || 0) + ' °C">' + T.tempLabel + ' <b>' + (g.temp || 0) + ' °C</b></span>' + (g.power ? '<span title="' + T.pwLabel + ' ' + g.power.draw + '/' + g.power.limit + ' W">' + T.pwLabel + ' <b>' + g.power.draw + '/' + g.power.limit + ' W</b></span>' : '') + '</div></div>';
       });
       gpuBody.innerHTML = ghtml;
       gpuBody.querySelectorAll('.gpu-link').forEach(function(el) {
@@ -560,8 +630,32 @@ function getWebviewHtml(nonce) {
   });
 
   // ── 设置模态 ──
-  var barCfg = {barEnabled:true,cpu:true,ram:false,net:'off',ssh:false,gpu:{summary:true,mode:'off',cards:[],metric:'both'}};
+  var barCfg = {barEnabled:true,cpu:true,ram:false,disk:false,net:'off',ssh:false,gpu:{summary:true,mode:'off',cards:[],metric:'both'}};
+  var diskCfg = {mountFilter:'default'};
   var curInterval = 2, gpuCount = 8, modalOpen = false;
+
+  // ── 磁盘渲染 ──
+  function renderDisk(disks) {
+    var card = document.getElementById('disk-card');
+    var el = document.getElementById('disk-body');
+    if (!disks || !disks.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+    var h = '';
+    disks.forEach(function(d) {
+      var cls = colorClass(d.pct);
+      h += '<div class="disk-item">'
+        + '<div class="disk-header"><span class="disk-mount" title="' + d.mount + '">' + d.mount + '</span>'
+        + '<span class="disk-info"><span class="disk-meta">' + d.usedStr + ' / ' + d.totalStr + '</span><span class="disk-pct ' + cls + '">' + d.pct + '%</span></span></div>'
+        + '<div class="track"><div class="fill ' + cls + '" id="disk-fill-' + disks.indexOf(d) + '"></div></div>'
+        + '<div class="disk-footer"><span class="disk-meta">' + d.usedStr + ' / ' + d.totalStr + '</span><span class="disk-pct ' + cls + '">' + d.pct + '%</span></div>'
+        + '</div>';
+    });
+    el.innerHTML = h;
+    disks.forEach(function(d, i) {
+      var fill = document.getElementById('disk-fill-' + i);
+      if (fill) fill.style.width = d.pct + '%';
+    });
+  }
 
   function openModal() {
     modalOpen = true;
@@ -570,6 +664,7 @@ function getWebviewHtml(nonce) {
     document.getElementById('modal-title-text').textContent = T.settTitle;
     document.getElementById('sett-interval-label').textContent = T.interval;
     document.getElementById('sett-bar-label').textContent = T.statusBar;
+    document.getElementById('sett-disk-label').textContent = T.diskLabel;
     renderIntervalRow();
     renderSettingsBody();
   }
@@ -619,6 +714,7 @@ function getWebviewHtml(nonce) {
     if (!barOn) { body.innerHTML = h; bindSettingsEvents(body, cfg); return; }
     h += row('CPU', toggle('cpu', cfg.cpu ? T.enabled : T.disabled));
     h += row('RAM', toggle('ram', cfg.ram ? T.enabled : T.disabled));
+    h += row(T.diskLabel, toggle('disk', cfg.disk ? T.enabled : T.disabled));
     h += row(T.netLabel, radio('net','off',T.scopeOff)+radio('net','up',T.netUp)+radio('net','down',T.netDown)+radio('net','both',T.netAll)+radio('net','combined',T.netMerge));
     h += row(T.sshLabel, toggle('ssh', cfg.ssh ? T.enabled : T.disabled));
     h += row(T.gpuSummary, '<button class="tb'+(gpu.summary?' on':'')+'" data-act="gpu-summary">'+(gpu.summary?T.enabled:T.disabled)+'</button>');
@@ -651,6 +747,21 @@ function getWebviewHtml(nonce) {
 
     body.innerHTML = h;
     bindSettingsEvents(body, cfg);
+
+    var diskBody = document.getElementById('sett-disk-body');
+    var dh = '<div class="sett-row"><span style="font-size:10px;color:var(--muted);min-width:60px">' + T.diskFilter + '</span>';
+    dh += '<button class="tb' + (diskCfg.mountFilter==='default'?' on':'') + '" data-act="disk-filter" data-val="default" title="' + T.diskDefaultDesc + '">' + T.diskDefault + '</button>';
+    dh += '<button class="tb' + (diskCfg.mountFilter==='more'?' on':'') + '" data-act="disk-filter" data-val="more" title="' + T.diskMoreDesc + '">' + T.diskMore + '</button>';
+    dh += '<button class="tb' + (diskCfg.mountFilter==='all'?' on':'') + '" data-act="disk-filter" data-val="all" title="' + T.diskAllDesc + '">' + T.diskAll + '</button></div>';
+    dh += '<div style="font-size:9px;color:var(--muted);margin-top:2px;padding-left:2px">' + (diskCfg.mountFilter==='default'?T.diskDefaultDesc:diskCfg.mountFilter==='more'?T.diskMoreDesc:T.diskAllDesc) + '</div>';
+    diskBody.innerHTML = dh;
+    diskBody.querySelectorAll('[data-act="disk-filter"]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        diskCfg.mountFilter = this.dataset.val;
+        vscode.postMessage({cmd:'setConfig',key:'disk',value:diskCfg});
+        renderSettingsBody();
+      });
+    });
   }
 
   function bindSettingsEvents(body, cfg) {
@@ -811,7 +922,8 @@ function readConfig() {
   const c = vscode.workspace.getConfiguration('sysmonitor');
   const interval = c.get('refreshInterval', 2);
   const barCfg = c.get('statusBar') || { barEnabled: true, cpu: true, ram: false, net: 'off', ssh: false, gpu: { summary: true, mode: 'off', cards: [], metric: 'both' } };
-  return { interval, barCfg };
+  const diskCfg = c.get('disk') || { mountFilter: 'default' };
+  return { interval, barCfg, diskCfg };
 }
 
 function getMyGpuIndices() {
@@ -827,7 +939,7 @@ function getMyGpuIndices() {
         const status = fs.readFileSync('/proc/' + pid + '/status', 'utf8');
         const m = status.match(/Uid:\s+(\d+)/);
         if (m && parseInt(m[1]) === process.getuid()) uuidSet.add(parts[1].trim());
-      } catch {}
+      } catch { }
     }
     if (uuidSet.size === 0) return [];
     const uuidOut = execSync('nvidia-smi --query-gpu=index,gpu_uuid --format=csv,noheader', { timeout: 3000 }).toString().trim();
@@ -858,7 +970,7 @@ function getProcessData() {
         }
       }
     }
-  } catch {}
+  } catch { }
   try {
     const gpuOut = execSync('nvidia-smi --query-compute-apps=pid,gpu_uuid,used_memory --format=csv,noheader,nounits', { timeout: 3000 }).toString().trim();
     if (gpuOut) {
@@ -869,7 +981,7 @@ function getProcessData() {
           const [idx, uuid] = line.split(', ');
           uuidToIdx[uuid.trim()] = parseInt(idx);
         }
-      } catch {}
+      } catch { }
       const gpuMap = {};
       for (const line of gpuOut.split('\n').filter(Boolean)) {
         const parts = line.split(', ');
@@ -888,7 +1000,7 @@ function getProcessData() {
         }
       }
     }
-  } catch {}
+  } catch { }
   return procs;
 }
 
@@ -911,6 +1023,9 @@ class MonitorViewProvider {
           this._resetTimer(msg.value * 1000);
         } else if (msg.key === 'statusBar') {
           c.update('statusBar', msg.value, true).then(() => updateBar());
+        } else if (msg.key === 'disk') {
+          c.update('disk', msg.value, true);
+          refreshDiskCache(msg.value.mountFilter);
         }
       } else if (msg.cmd === 'openSettings') {
         vscode.commands.executeCommand('workbench.action.openSettings', 'sysmonitor');
@@ -923,14 +1038,16 @@ class MonitorViewProvider {
 
     const tick = () => {
       if (!this._view || this._paused) return;
-      const cpu  = getCpuPercent();
-      const mem  = getMemInfo();
-      const net  = getNetSpeed();
+      const cpu = getCpuPercent();
+      const mem = getMemInfo();
+      const net = getNetSpeed();
       const gpus = getAllGpus();
-      const ssh  = getSshTraffic();
+      const ssh = getSshTraffic();
       const loads = os.loadavg();
       const lang = vscode.env.language;
       const netData = { rxStr: fmtBytes(net.rx), txStr: fmtBytes(net.tx) };
+      const { diskCfg } = readConfig();
+      const disks = getDiskInfo().map(d => ({ mount: d.mount, usedStr: fmtDiskSize(d.used), totalStr: fmtDiskSize(d.total), pct: d.pct }));
       const payload = {
         lang, cpu, cpuCores: os.cpus().length,
         load1: loads[0].toFixed(2), load5: loads[1].toFixed(2), load15: loads[2].toFixed(2),
@@ -938,22 +1055,27 @@ class MonitorViewProvider {
         gpus,
         net: netData,
         ssh: ssh.isSSH ? { isSSH: true, txStr: fmtBytes(ssh.rx), rxStr: fmtBytes(ssh.tx) } : { isSSH: false },
+        disks,
       };
       this._view.webview.postMessage({ cmd: 'update', payload });
-      latestData = { cpu, mem: { percent: mem.percent }, net: netData, ssh: payload.ssh, gpus };
+      latestData = { cpu, mem: { percent: mem.percent }, net: netData, ssh: payload.ssh, gpus, diskRoot: disks.find(d => d.mount === '/') };
       updateBar();
     };
     this._tick = tick;
 
-    const { interval } = readConfig();
+    const { interval, diskCfg } = readConfig();
     this._interval = interval * 1000;
+    // 首次同步加载磁盘数据（--local 避免 NFS 挂起）
+    try { _diskCache = parseDfOutput(execSync('df -PT --local 2>/dev/null', { timeout: 3000 }).toString(), diskCfg.mountFilter); } catch { }
     tick();
     this._timer = setInterval(tick, this._interval);
+    this._diskTimer = setInterval(() => { const { diskCfg: dc } = readConfig(); refreshDiskCache(dc.mountFilter); }, 10000);
 
     this._procsTimer = setInterval(() => { this._pushProcs(); }, 5000);
 
     view.onDidDispose(() => {
       clearInterval(this._timer);
+      clearInterval(this._diskTimer);
       clearInterval(this._procsTimer);
       this._view = null;
     });
@@ -973,10 +1095,10 @@ class MonitorViewProvider {
 
   _pushConfig() {
     if (!this._view) return;
-    const { interval, barCfg } = readConfig();
+    const { interval, barCfg, diskCfg } = readConfig();
     const gpus = getAllGpus();
     this._view.webview.postMessage({
-      cmd: 'config', interval, barCfg,
+      cmd: 'config', interval, barCfg, diskCfg,
       gpuCount: gpus.length || 8,
     });
   }
@@ -990,6 +1112,7 @@ function formatBarText(cfg, data) {
   const parts = [];
   if (cfg.cpu && data.cpu !== undefined) parts.push('$(dashboard) ' + data.cpu + '%');
   if (cfg.ram && data.mem) parts.push('$(server) ' + data.mem.percent + '%');
+  if (cfg.disk && data.diskRoot) parts.push('$(database) ' + data.diskRoot.pct + '%');
   if (cfg.net && cfg.net !== 'off' && data.net) {
     let netTxt = '';
     if (cfg.net === 'up') netTxt = '↑' + data.net.txStr;

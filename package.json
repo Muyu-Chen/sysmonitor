@@ -2,7 +2,7 @@
   "name": "sysmonitor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "publisher": "LiChenxi",
   "license": "MIT",
   "icon": "icon.png",
@@ -10,9 +10,15 @@
     "type": "git",
     "url": "https://github.com/lcx-0504/sysmonitor.git"
   },
-  "engines": { "vscode": "^1.70.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
     "viewsContainers": {
@@ -60,9 +66,23 @@
             "ram": false,
             "net": "off",
             "ssh": false,
-            "gpu": { "summary": true, "mode": "off", "cards": [], "firstN": 2, "metric": "both", "skipIdle": false }
+            "gpu": {
+              "summary": true,
+              "mode": "off",
+              "cards": [],
+              "firstN": 2,
+              "metric": "both",
+              "skipIdle": false
+            }
           },
           "description": "Status bar display configuration"
+        },
+        "sysmonitor.disk": {
+          "type": "object",
+          "default": {
+            "mountFilter": "default"
+          },
+          "description": "Disk monitoring settings"
         }
       }
     }
