@@ -1085,6 +1085,11 @@ function activate(context) {
           context.globalState.update('sysmonitor.notifyDismissed', true);
         }
       });
+    } else if (!dismissed && alreadyAdded) {
+      context.globalState.update('sysmonitor.notifyDismissed', true);
+      vscode.window.showInformationMessage(zh
+        ? '✅ System Monitor 已在 SSH 默认扩展列表中，下次连接 Linux 服务器时将自动安装。'
+        : '✅ System Monitor is already in your SSH default extensions and will auto-install on Linux servers.');
     }
     context.subscriptions.push(
       vscode.commands.registerCommand('sysmonitor.openPanel', () => {
