@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.14 — 2025-04-12
+
+- **README refresh**: add screenshots (performance, process manager, settings), restructure documentation with feature tables
+- **CHANGELOG**: add full version history from 1.0.8 onward
+- **No GPU display**: show a clean "No GPU" label on the summary card; hide capsules and action buttons; fix card spacing
+
 ## 1.0.13 — 2025-04-12
 
 - **Disk custom filter**: switching to "Custom" mode now preserves user-modified rules instead of always inheriting from the current preset
