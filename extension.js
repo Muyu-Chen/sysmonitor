@@ -490,7 +490,7 @@ function getWebviewHtml(nonce, initCfg) {
 <div class="card" id="free-gpu-card" style="display:none">
   <div class="card-head"><span class="card-label">GPU</span><span class="card-value" id="gpu-summary">--</span></div>
   <div class="capsules" id="gpu-capsules"></div>
-  <div class="capsule-actions">
+  <div class="capsule-actions" id="capsule-actions">
     <button class="action-btn" id="select-all-btn">全选空闲</button>
     <button class="action-btn" id="clear-btn">清除</button>
     <button class="action-btn primary" id="copy-btn" disabled>复制环境变量</button>
@@ -751,7 +751,7 @@ function getWebviewHtml(nonce, initCfg) {
         });
       }
     } else {
-      gpuBody.innerHTML = '<span class="gpu-na">' + T.noGpu + '</span>';
+      gpuBody.innerHTML = '';
     }
 
     document.getElementById('net-tx').textContent = d.net.txStr;
@@ -765,8 +765,14 @@ function getWebviewHtml(nonce, initCfg) {
     renderSpark(document.getElementById('net-spark-rx-area'), null, netRxHist, netMax, 'var(--accent)');
 
     var freeCard = document.getElementById('free-gpu-card');
+    var capsElem = document.getElementById('gpu-capsules');
+    var actElem = document.getElementById('capsule-actions');
     if (d.gpus && d.gpus.length) {
       freeCard.style.display = '';
+      freeCard.querySelector('.card-head').style.marginBottom = '';
+      capsElem.style.display = '';
+      actElem.style.display = '';
+      gpuBody.style.display = '';
       var caps = document.getElementById('gpu-capsules');
       var freeCount = 0;
       var capsHtml = '';
@@ -788,7 +794,14 @@ function getWebviewHtml(nonce, initCfg) {
         var mp = g.memTotal > 0 ? Math.round((parseInt(g.memUsed) || 0) / g.memTotal * 100) : 0;
         return u < 5 && mp < 10;
       }).map(function(g){ return g.idx; });
-    } else { freeCard.style.display = 'none'; }
+    } else {
+      freeCard.style.display = '';
+      freeCard.querySelector('.card-head').style.marginBottom = '0';
+      document.getElementById('gpu-summary').textContent = zh ? '无 GPU' : 'No GPU';
+      capsElem.style.display = 'none';
+      actElem.style.display = 'none';
+      gpuBody.style.display = 'none';
+    }
 
     document.getElementById('updated').textContent = T.updAt + new Date().toLocaleTimeString();
   });

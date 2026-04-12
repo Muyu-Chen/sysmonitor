@@ -4,29 +4,52 @@
 
 A lightweight VS Code / Cursor extension for monitoring system resources on **remote Linux** (Remote-SSH, WSL, Dev Containers, etc.).
 
+![Performance Tab](https://raw.githubusercontent.com/lcx-0504/sysmonitor/main/screenshots/perf.png)
+
 ## Features
 
-- **CPU** — Usage percentage, 1/5/15 min load averages
-- **RAM** — Used / Available / Total
-- **Network** — Upload & download speed
-- **SSH Traffic** — Upload & download through your SSH connection
-- **GPU** — NVIDIA GPU utilization, VRAM, temperature, power (multi-GPU)
-- **Free GPU Picker** — Select idle GPUs and copy `CUDA_VISIBLE_DEVICES`
-- **Process Manager** — Sortable by CPU / RAM / GPU, searchable (supports `GPU0` / `#0` syntax)
-- **Status Bar** — Configurable pinned metrics
-- **Settings** — Built-in settings panel, no need to edit JSON
-- **i18n** — Chinese & English, auto-detected
+| Category | Details |
+|----------|---------|
+| **CPU** | Usage %, 1/5/15 min load, core count, sparkline chart |
+| **RAM** | Used / Available / Total, sparkline chart |
+| **Disk** | Mount points with progress bars, configurable filters (default / more / all / custom) |
+| **Network** | Upload & download speed, sparkline charts |
+| **SSH Traffic** | Upload & download through your SSH connection |
+| **GPU** | NVIDIA utilization, VRAM, temperature, power draw (multi-GPU) |
+| **GPU Picker** | Select idle GPUs, copy `CUDA_VISIBLE_DEVICES` with one click |
+| **Process Manager** | Sort by CPU / RAM / GPU, searchable, right-click to copy cell or row |
+| **Status Bar** | Customizable position, priority, and displayed metrics |
+| **Settings** | Built-in settings panel with live preview — no JSON editing needed |
+| **i18n** | Chinese & English, auto-detected |
+
+### Process Manager
+
+![Process Manager](https://raw.githubusercontent.com/lcx-0504/sysmonitor/main/screenshots/procs.png)
+
+- Sort by **CPU**, **RAM**, or **GPU** usage
+- Search by process name, PID, user, or command (`GPU0` / `#0` syntax to filter by GPU card)
+- Right-click context menu: **Copy Cell** / **Copy Row** (full command included)
+
+### Settings Panel
+
+![Settings](https://raw.githubusercontent.com/lcx-0504/sysmonitor/main/screenshots/settings.png)
+
+- **Refresh Interval** — 1s / 2s / 5s / 10s
+- **Status Bar** — Toggle visibility, position (left/right), priority, choose which metrics to display
+- **Disk Filter** — Default / More / All / Custom (exclude FS types, path prefixes, virtual FS)
+- **Display** — Enable/disable sparkline charts, chart duration (1–30 min)
 
 ## Quick Start
 
-1. Install the extension (from Marketplace or `.vsix`)
-2. (Optional, Remote-SSH only) When prompted in a local window, add the extension ID to `remote.SSH.defaultExtensions`
-3. Open a **remote** workspace: Remote-SSH, **WSL**, or a **Dev Container** on **Linux**
-4. The sidebar and status bar appear when the extension runs on Linux
+1. Install the extension from [Marketplace](https://marketplace.visualstudio.com/items?itemName=LiChenxi.sysmonitor) or [Open VSX](https://open-vsx.org/extension/LiChenxi/sysmonitor)
+2. Open a **remote** workspace: **Remote-SSH**, **WSL**, or a **Dev Container** on **Linux**
+3. The sidebar icon and status bar metrics appear automatically
 
-> The extension runs in the **remote** extension host, not on your local OS. It only collects metrics when the remote OS is **Linux**.
-> The activity bar icon appears **only** in a **remote** window (WSL, Dev Containers, SSH, etc.), not in a pure local window.
-> The remote machine must run **Linux**; Windows or macOS remotes show an unsupported message.
+> **Note**: The extension runs in the remote extension host, not on your local OS. The activity bar icon only appears in remote windows. The remote machine must run **Linux**.
+
+### First launch (Remote-SSH)
+
+When you open a local window, the extension offers to add itself to `remote.SSH.defaultExtensions` so it auto-installs on every server you connect to.
 
 ## Configuration
 
@@ -37,6 +60,8 @@ All settings are accessible via the **Settings** button in the sidebar panel. Yo
   "sysmonitor.refreshInterval": 2,
   "sysmonitor.statusBar": {
     "barEnabled": true,
+    "alignment": "left",
+    "priority": 10,
     "cpu": true,
     "ram": true,
     "net": "both",
@@ -47,24 +72,39 @@ All settings are accessible via the **Settings** button in the sidebar panel. Yo
       "metric": "both",
       "skipIdle": false
     }
+  },
+  "sysmonitor.disk": {
+    "mountFilter": "default",
+    "hideParentMounts": true
   }
 }
 ```
 
-### GPU display modes
+### GPU status bar modes
 
-- `"mode": "off"` — no per-card stats in status bar
-- `"mode": "all"` — show all cards
-- `"mode": "first"` + `"firstN": 4` — show first N cards
-- `"mode": "specify"` + `"cards": [0, 1, 3]` — show specific cards
-- `"mode": "my"` — show only cards used by your processes
+| Mode | Description |
+|------|-------------|
+| `"off"` | No per-card stats |
+| `"all"` | Show all cards |
+| `"first"` | Show first N cards (`"firstN": 4`) |
+| `"specify"` | Show specific cards (`"cards": [0, 1, 3]`) |
+| `"my"` | Show only cards used by your processes |
 
-### Hide status bar
+### Disk filter modes
 
-Set `"barEnabled": false` to hide the status bar while keeping the sidebar panel available.
+| Mode | Description |
+|------|-------------|
+| `"default"` | Excludes vfat, virtual FS, and common system paths |
+| `"more"` | Only excludes virtual FS |
+| `"all"` | Shows everything including virtual FS |
+| `"custom"` | Configure FS type exclusions, path prefix exclusions, and virtual FS visibility |
 
 ## Requirements
 
-- Linux remote server (connects via VS Code Remote-SSH)
+- Linux remote server
 - NVIDIA GPU monitoring requires `nvidia-smi`
 - SSH traffic monitoring requires `ss`
+
+## License
+
+[MIT](LICENSE)
