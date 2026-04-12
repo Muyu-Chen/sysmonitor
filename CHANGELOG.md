@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.21 — 2026-04-13
+
+- **GPU tag font size**: adjust to 11px for better visual balance
+
 ## 1.0.20 — 2025-07-13
 
 - **GPU tag font size**: increase from 9px to 12px to match table body text
