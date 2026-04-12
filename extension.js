@@ -374,7 +374,7 @@ function getWebviewHtml(nonce, initCfg) {
   td[title] { cursor: default; }
   tr:hover td { background: var(--vscode-list-hoverBackground, rgba(255,255,255,.04)); }
   .r { text-align: right; }
-  .gpu-tag { font-size: 9px; border-radius: 3px; padding: 0 4px; white-space: nowrap; display: block; margin-bottom: 1px; text-align: center; background: var(--vscode-badge-background,#4d4d4d); color: var(--vscode-badge-foreground,#fff); }
+  .gpu-tag { font-size: 12px; border-radius: 3px; padding: 0 4px; white-space: nowrap; display: block; margin-bottom: 1px; text-align: center; background: var(--vscode-badge-background,#4d4d4d); color: var(--vscode-badge-foreground,#fff); }
   .gpu-tag.tag-accent { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
   .gpu-tag.tag-warn { background: color-mix(in srgb, var(--warn) 24%, transparent); color: var(--text); }
   .gpu-tag.tag-danger { background: color-mix(in srgb, var(--danger) 24%, transparent); color: var(--text); }

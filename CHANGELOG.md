@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.20 — 2025-07-13
+
+- **GPU tag font size**: increase from 9px to 12px to match table body text
+
 ## 1.0.19 — 2025-07-13
 
 - **GPU VRAM percentage**: GPU tags in process table now show `#idx vram pct%` format (e.g. `#0 1.2G 45%`)
