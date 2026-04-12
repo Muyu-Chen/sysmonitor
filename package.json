@@ -2,7 +2,7 @@
   "name": "sysmonitor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "publisher": "LiChenxi",
   "license": "MIT",
   "icon": "icon.png",
@@ -89,7 +89,10 @@
         },
         "sysmonitor.display": {
           "type": "object",
-          "default": { "charts": true, "sparkMinutes": 5 },
+          "default": {
+            "charts": true,
+            "sparkMinutes": 5
+          },
           "description": "Display settings"
         }
       }

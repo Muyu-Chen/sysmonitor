@@ -1022,9 +1022,9 @@ function getWebviewHtml(nonce, initCfg) {
     dh += '<div class="sett-row"><span style="font-size:9px;color:var(--muted);min-width:70px" title="' + T.diskShowVirtualTip + '">' + T.diskShowVirtual + ' ⓘ</span>';
     dh += '<button class="tb' + (!showVfs ? ' on' : '') + '"' + dis + ' data-act="disk-show-virtual">' + (!showVfs ? T.enabled : T.disabled) + '</button></div>';
     dh += '<div class="sett-row" style="margin-top:2px"><span style="font-size:9px;color:var(--muted);min-width:70px" title="' + T.diskExcludeFsTip + '">' + T.diskExcludeFs + ' ⓘ</span>';
-    dh += '<input class="sett-input wide" id="disk-fs-input" type="text" value="' + showFs.replace(/"/g,'&quot;') + '"' + (isCustom ? ' placeholder="vfat,ntfs"' : '') + (isCustom ? '' : ' readonly') + ' /></div>';
+    dh += '<input class="sett-input wide" id="disk-fs-input" type="text" value="' + showFs.replace(/"/g,'&quot;') + '"' + (isCustom ? '' : ' readonly') + ' /></div>';
     dh += '<div class="sett-row" style="margin-top:2px"><span style="font-size:9px;color:var(--muted);min-width:70px" title="' + T.diskExcludePathTip + '">' + T.diskExcludePath + ' ⓘ</span>';
-    dh += '<input class="sett-input wide" id="disk-path-input" type="text" value="' + showPaths.replace(/"/g,'&quot;') + '"' + (isCustom ? ' placeholder="/proc,/sys,/run"' : '') + (isCustom ? '' : ' readonly') + ' /></div>';
+    dh += '<input class="sett-input wide" id="disk-path-input" type="text" value="' + showPaths.replace(/"/g,'&quot;') + '"' + (isCustom ? '' : ' readonly') + ' /></div>';
     dh += '</div>';
     dh += '<div class="sett-row" style="margin-top:6px"><span style="font-size:10px;color:var(--muted);min-width:60px" title="' + T.diskHideParentTip + '">' + T.diskHideParent + ' ⓘ</span>';
     dh += '<button class="tb' + (diskCfg.hideParentMounts !== false ? ' on' : '') + '" data-act="disk-hide-parent">' + (diskCfg.hideParentMounts !== false ? T.enabled : T.disabled) + '</button></div>';
@@ -1034,9 +1034,20 @@ function getWebviewHtml(nonce, initCfg) {
       btn.addEventListener('click', function() {
         var val = this.dataset.val;
         if (val === 'custom' && curFilter !== 'custom') {
-          diskCfg.customFsExclude = showFs;
-          diskCfg.customPathExclude = showPaths;
-          diskCfg.showVirtualFs = showVfs;
+          var existFs = diskCfg.customFsExclude || '';
+          var existPaths = diskCfg.customPathExclude || '';
+          var existVfs = !!diskCfg.showVirtualFs;
+          var presets = [
+            {fs:'vfat',paths:'/proc,/sys,/run,/snap,/usr,/etc,/dev,/init',vfs:false},
+            {fs:'',paths:'',vfs:false},
+            {fs:'',paths:'',vfs:true}
+          ];
+          var matchesPreset = presets.some(function(p){ return existFs===p.fs && existPaths===p.paths && existVfs===p.vfs; });
+          if (matchesPreset) {
+            diskCfg.customFsExclude = showFs;
+            diskCfg.customPathExclude = showPaths;
+            diskCfg.showVirtualFs = showVfs;
+          }
         }
         diskCfg.mountFilter = val;
         vscode.postMessage({cmd:'setConfig',key:'disk',value:diskCfg});
@@ -1574,6 +1585,7 @@ function formatBarText(cfg, data) {
   if (cfg.gpu && data.gpus && data.gpus.length) {
     const gpu = cfg.gpu;
     const metric = gpu.metric || 'both';
+    let gpuIcon = false;
     if (gpu.summary) {
       let free = 0;
       data.gpus.forEach(g => {
@@ -1582,6 +1594,7 @@ function formatBarText(cfg, data) {
         if (u < 5 && mp < 10) free++;
       });
       parts.push('$(circuit-board) ' + free + '/' + data.gpus.length);
+      gpuIcon = true;
     }
     const mode = gpu.mode || 'off';
     if (mode !== 'off') {
@@ -1604,7 +1617,7 @@ function formatBarText(cfg, data) {
         else if (metric === 'vram') gpuParts.push('#' + idx + ' ' + mp + '%V');
         else gpuParts.push('#' + idx + ' ' + u + '%/' + mp + '%V');
       });
-      if (gpuParts.length) parts.push('$(circuit-board) ' + gpuParts.join(' '));
+      if (gpuParts.length) parts.push((gpuIcon ? '' : '$(circuit-board) ') + gpuParts.join(' '));
     }
   }
   return parts.length > 0 ? parts.join('  ') : '$(pulse) Monitor';
