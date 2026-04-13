@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.23 — 2025-07-14
+
+- **Charts toggle responsive**: background sparklines now hide/show immediately without requiring Reload Window; also applies to dynamically created GPU cards
+- **Process table sync**: process refresh interval now follows user setting (was hardcoded 5s); "Updated at" timestamp and process table refresh in sync
+- **Copy PID**: right-click context menu in process table now includes "Copy PID" option
+- **Leaf mount tooltip**: added example (`/autodl-fs` vs `/autodl-fs/data`) for clarity
+- **Minor**: removed unnecessary forced reflow in settings panel
+
 ## 1.0.22 — 2025-07-13
 
 - **Local Linux support**: extension now activates on local Linux desktops in addition to remote environments

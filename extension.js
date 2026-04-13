@@ -535,7 +535,7 @@ function getWebviewHtml(nonce, initCfg) {
           scopeOff:'关',scopeSummary:'总览',scopeCard:'指定卡',scopeMy:'我的卡',metUtil:'仅利用率',metVram:'仅显存',metBoth:'全部显示',
           netUp:'仅上传',netDown:'仅下载',netAll:'全部显示',netMerge:'合并显示',
           sshLabel:'SSH速率',gpuSummary:'GPU总览',gpuPerf:'GPU性能显示',gpuAll:'所有卡',gpuSpecify:'指定卡',gpuFirst:'前几张',gpuMetric:'GPU显示指标',gpuSkipIdle:'隐藏空闲卡',viewProcs:'查看进程',
-          diskLabel:'磁盘',diskNoData:'无磁盘数据',diskFilter:'挂载过滤',diskDefault:'默认',diskMore:'更多',diskAll:'全部',diskCustom:'自定义',diskShowVirtual:'排除虚拟 FS',diskShowVirtualTip:'tmpfs, sysfs, proc, devtmpfs 等',diskExcludeFs:'排除 FS 类型',diskExcludeFsTip:'如 vfat, ntfs, fuse 等文件系统类型',diskExcludePath:'排除路径前缀',diskExcludePathTip:'如 /proc, /sys, /run 等挂载路径',diskHideParent:'仅显示叶子挂载点',diskHideParentTip:'适用于 AutoDL 等平台，过滤共享存储池，仅显示个人配额',
+          diskLabel:'磁盘',diskNoData:'无磁盘数据',diskFilter:'挂载过滤',diskDefault:'默认',diskMore:'更多',diskAll:'全部',diskCustom:'自定义',diskShowVirtual:'排除虚拟 FS',diskShowVirtualTip:'tmpfs, sysfs, proc, devtmpfs 等',diskExcludeFs:'排除 FS 类型',diskExcludeFsTip:'如 vfat, ntfs, fuse 等文件系统类型',diskExcludePath:'排除路径前缀',diskExcludePathTip:'如 /proc, /sys, /run 等挂载路径',diskHideParent:'仅显示叶子挂载点',diskHideParentTip:'例: /autodl-fs 和 /autodl-fs/data 同时存在时只显示 /autodl-fs/data（适用于 AutoDL 等平台）',
           displayLabel:'显示',chartsToggle:'卡片背景图表',sparkLabel:'图表时长',
           pcpu:'CPU',pmem:'内存',pgpu:'GPU',ppid:'PID',puser:'用户',pname:'进程名',pcpuPct:'CPU%',pmemCol:'内存',pgpuCol:'GPU',pcount:'共 {n} 进程',pnoGpu:'—',pcmd:'命令',filterHint:'搜索进程...' }
       : { min:' min',cores:' cores',used:'Used',avail:'Avail',total:'Total',srvNet:'Server Net',net:'Network',localSSH:'Local SSH',up:'↑ Up',down:'↓ Down',selAll:'Select All',clear:'Clear',copyEnv:'Copy Env Var',detecting:'Detecting…',noGpu:'No NVIDIA GPU detected',updAt:'Updated ',utilLabel:'Util',memLabel:'VRAM',tempLabel:'Temp',pwLabel:'Power',
@@ -544,7 +544,7 @@ function getWebviewHtml(nonce, initCfg) {
           scopeOff:'Off',scopeSummary:'Summary',scopeCard:'Card',scopeMy:'My Card',metUtil:'Util Only',metVram:'VRAM Only',metBoth:'All',
           netUp:'Upload',netDown:'Download',netAll:'All',netMerge:'Merged',
           sshLabel:'SSH Traffic',gpuSummary:'GPU Summary',gpuPerf:'GPU Performance',gpuAll:'All Cards',gpuSpecify:'Specific',gpuFirst:'First N',gpuMetric:'GPU Metric',gpuSkipIdle:'Hide Idle',viewProcs:'View Procs',
-          diskLabel:'Disk',diskNoData:'No disk data',diskFilter:'Mount Filter',diskDefault:'Default',diskMore:'More',diskAll:'All',diskCustom:'Custom',diskShowVirtual:'Exclude Virtual FS',diskShowVirtualTip:'tmpfs, sysfs, proc, devtmpfs, etc.',diskExcludeFs:'Exclude FS Type',diskExcludeFsTip:'e.g. vfat, ntfs, fuse',diskExcludePath:'Exclude Path Prefix',diskExcludePathTip:'e.g. /proc, /sys, /run',diskHideParent:'Leaf mounts only',diskHideParentTip:'For platforms like AutoDL: hides shared pools, shows only your quota',
+          diskLabel:'Disk',diskNoData:'No disk data',diskFilter:'Mount Filter',diskDefault:'Default',diskMore:'More',diskAll:'All',diskCustom:'Custom',diskShowVirtual:'Exclude Virtual FS',diskShowVirtualTip:'tmpfs, sysfs, proc, devtmpfs, etc.',diskExcludeFs:'Exclude FS Type',diskExcludeFsTip:'e.g. vfat, ntfs, fuse',diskExcludePath:'Exclude Path Prefix',diskExcludePathTip:'e.g. /proc, /sys, /run',diskHideParent:'Leaf mounts only',diskHideParentTip:'e.g. if /autodl-fs and /autodl-fs/data both exist, only /autodl-fs/data is shown (useful on AutoDL, etc.)',
           displayLabel:'Display',chartsToggle:'Card Background Charts',sparkLabel:'Chart Duration',
           pcpu:'CPU',pmem:'Memory',pgpu:'GPU',ppid:'PID',puser:'User',pname:'Process',pcpuPct:'CPU%',pmemCol:'Mem',pgpuCol:'GPU',pcount:'{n} processes',pnoGpu:'—',pcmd:'Command',filterHint:'Search...' };
     document.getElementById('l-1m').textContent = '1' + T.min;
@@ -709,6 +709,7 @@ function getWebviewHtml(nonce, initCfg) {
             + '<div class="gpu-stats"><span id="gpu-temp-' + g.idx + '" title="' + T.tempLabel + ' ' + (g.temp || 0) + ' °C">' + T.tempLabel + ' <b>' + (g.temp || 0) + ' °C</b></span>' + (g.power ? '<span id="gpu-power-' + g.idx + '" title="' + T.pwLabel + ' ' + g.power.draw + '/' + g.power.limit + ' W">' + T.pwLabel + ' <b>' + g.power.draw + '/' + g.power.limit + ' W</b></span>' : '') + '</div></div>';
         });
         gpuBody.innerHTML = ghtml;
+        applyCharts();
         gpuBody.querySelectorAll('.gpu-link').forEach(function(el) {
           el.addEventListener('click', function() {
             var idx = this.dataset.gpuLink;
@@ -873,6 +874,7 @@ function getWebviewHtml(nonce, initCfg) {
     var vis = displayCfg.charts !== false ? '' : 'none';
     document.querySelectorAll('.spark-bg').forEach(function(el) { el.style.display = vis; });
   }
+  applyCharts();
 
   // ── 磁盘渲染 ──
   var _diskKeys = [], _gpuKeys = [];
@@ -1049,7 +1051,6 @@ function getWebviewHtml(nonce, initCfg) {
     dh += '<div class="sett-row" style="margin-top:6px"><span style="font-size:10px;color:var(--muted);min-width:60px" title="' + T.diskHideParentTip + '">' + T.diskHideParent + ' ⓘ</span>';
     dh += '<button class="tb' + (diskCfg.hideParentMounts !== false ? ' on' : '') + '" data-act="disk-hide-parent">' + (diskCfg.hideParentMounts !== false ? T.enabled : T.disabled) + '</button></div>';
     diskBody.innerHTML = dh;
-    void diskBody.offsetHeight;
     diskBody.querySelectorAll('[data-act="disk-filter"]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var val = this.dataset.val;
@@ -1313,11 +1314,16 @@ function getWebviewHtml(nonce, initCfg) {
     item1.className = 'ctx-menu-item';
     item1.textContent = zh ? '复制单元格' : 'Copy Cell';
     item1.addEventListener('click', function() { navigator.clipboard.writeText(cellText); removeCtxMenu(); });
+    var itemPid = document.createElement('div');
+    itemPid.className = 'ctx-menu-item';
+    itemPid.textContent = zh ? '复制 PID' : 'Copy PID';
+    itemPid.addEventListener('click', function() { navigator.clipboard.writeText(rowCells[0].textContent.trim()); removeCtxMenu(); });
     var item2 = document.createElement('div');
     item2.className = 'ctx-menu-item';
     item2.textContent = zh ? '复制整行' : 'Copy Row';
     item2.addEventListener('click', function() { navigator.clipboard.writeText(rowText); removeCtxMenu(); });
     menu.appendChild(item1);
+    menu.appendChild(itemPid);
     menu.appendChild(item2);
     menu.style.left = e.clientX + 'px';
     menu.style.top = e.clientY + 'px';
@@ -1534,6 +1540,7 @@ class MonitorViewProvider {
         disks,
       };
       this._view.webview.postMessage({ cmd: 'update', payload });
+      this._pushProcs();
       latestData = { cpu, mem: { percent: mem.percent }, net: netData, ssh: payload.ssh, gpus, diskRoot: disks.find(d => d.mount === '/') };
       updateBar();
       const elapsed = Date.now() - _t0;
@@ -1552,12 +1559,9 @@ class MonitorViewProvider {
     this._timer = setInterval(tick, this._interval);
     this._diskTimer = setInterval(() => { refreshDiskCache(getConfig().diskCfg); }, 10000);
 
-    this._procsTimer = setInterval(() => { this._pushProcs(); }, 5000);
-
     view.onDidDispose(() => {
       clearInterval(this._timer);
       clearInterval(this._diskTimer);
-      clearInterval(this._procsTimer);
       this._view = null;
     });
   }
