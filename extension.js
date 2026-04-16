@@ -174,7 +174,6 @@ function refreshGpuChain() {
         }
         _gpuProcMap = gpuMap;
         _gpuMyIndices = [...myUuids].map(u => _uuidToIdx[u]).filter(i => i !== undefined).sort((a, b) => a - b);
-        dbg('chain complete \u2014 GPU proc data updated');
         if (_onChainDone) { _onChainDone(); _onChainDone = null; }
       }
     );

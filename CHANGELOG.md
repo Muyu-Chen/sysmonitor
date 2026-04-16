@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-04-16
 
-- **Fully async GPU pipeline**: All `nvidia-smi` calls are now non-blocking. GPU panel shows "Loading…" on first open, then data appears within seconds via instant callback. Merged UUID mapping into a single GPU query (2-step chain instead of 3). No more `execFileSync` — zero tick blocking from the very first frame.
-- **Async GPU process data**: Process table GPU tags (VRAM, card index) and "my GPU" detection are now fully asynchronous — no more blocking `nvidia-smi` calls during tick.
+- **Fully async GPU pipeline**: All `nvidia-smi` calls are now non-blocking. GPU panel shows “Loading…” on first open, then data appears within seconds via instant callback. Merged UUID mapping into a single GPU query (2-step chain instead of 3). No more `execFileSync` — zero tick blocking from the very first frame. Inspired by @klay7w’s PR #1.
+- **Async GPU process data**: Process table GPU tags (VRAM, card index) and “my GPU” detection are now fully asynchronous.
 - **Contributors**: Added Contributors section to README.
 
 ## 1.1.2 — 2026-04-16
