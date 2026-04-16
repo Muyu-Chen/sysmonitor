@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Async GPU collection**: GPU data is now collected asynchronously via `execFile` (non-blocking), eliminating UI freezes caused by slow `nvidia-smi` responses. Cached snapshots survive transient timeouts (30 s TTL). State transitions (fresh / fallback / unavailable) are logged to the Output Channel. Inspired by @klay7w's PR #1.
+- **Async GPU process data**: Process table GPU tags (VRAM, card index) and "my GPU" detection are now fully asynchronous — no more blocking `nvidia-smi` calls during tick.
 
 ## 1.1.2 — 2026-04-16
 
