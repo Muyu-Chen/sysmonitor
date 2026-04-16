@@ -3,7 +3,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync, execFileSync, execFile } = require('child_process');
+const { execSync, execFile } = require('child_process');
 
 const pkg = require(path.join(__dirname, 'package.json'));
 const EXTENSION_ID = `${pkg.publisher}.${pkg.name}`;
@@ -24,9 +24,11 @@ let _prevSshState = -1;
 let _prevDiskCount = -1;
 let _gpuCache = [];
 let _gpuCacheTime = 0;
-let _gpuRunning = false;
 let _gpuState = '';
-let _gpuFirstCall = true;
+let _onGpuReady = null;   // one-shot callback when GPU data first arrives
+let _onChainDone = null;  // one-shot callback when first full chain completes
+
+let _smiChainRunning = false;
 const GPU_CACHE_TTL = 30000;
 function dbg(msg) { if (_log) _log.appendLine('[' + new Date().toISOString().slice(11, 23) + '] ' + msg); }
 
@@ -106,14 +108,14 @@ function getDiskIO() {
   } catch { return { r: 0, w: 0 }; }
 }
 
-const GPU_SMI_ARGS = ['--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit',
+const GPU_SMI_ARGS = ['--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,gpu_uuid',
   '--format=csv,noheader,nounits'];
 
 function parseGpuCsv(stdout) {
   return stdout.trim().split('\n').filter(Boolean).map(line => {
-    const [idx, name, util, memUsed, memTotal, temp, pd, pl] = line.split(',').map(s => s.trim());
+    const [idx, name, util, memUsed, memTotal, temp, pd, pl, uuid] = line.split(',').map(s => s.trim());
     return {
-      idx: parseInt(idx), name,
+      idx: parseInt(idx), name, uuid: uuid || '',
       util: parseInt(util), memUsed: parseInt(memUsed), memTotal: parseInt(memTotal),
       temp: parseInt(temp),
       power: isNaN(parseFloat(pd)) ? null : { draw: parseFloat(pd).toFixed(0), limit: parseFloat(pl).toFixed(0) },
@@ -121,40 +123,66 @@ function parseGpuCsv(stdout) {
   });
 }
 
-function getAllGpus() {
-  // First call: synchronous to show GPU cards immediately
-  if (_gpuFirstCall) {
-    _gpuFirstCall = false;
-    try {
-      const out = execFileSync('nvidia-smi', GPU_SMI_ARGS, { timeout: 15000 }).toString();
-      _gpuCache = parseGpuCsv(out);
-      _gpuCacheTime = Date.now();
-      _gpuState = 'fresh';
-      dbg('gpu snapshot fresh (' + _gpuCache.length + ' gpus) [sync init]');
-    } catch (e) { dbg('gpu init failed: ' + (e.message || e)); }
-    return _gpuCache;
-  }
-  // Subsequent calls: async, non-blocking
-  if (!_gpuRunning) {
-    _gpuRunning = true;
-    execFile('nvidia-smi', GPU_SMI_ARGS, { timeout: 15000 },
-      (err, stdout) => {
-        _gpuRunning = false;
-        if (err) {
-          const s = _gpuCache.length > 0 ? 'fallback' : 'unavailable';
-          if (s !== _gpuState) { dbg('gpu snapshot ' + s + ': ' + (err.message || err)); _gpuState = s; }
-          return;
-        }
-        try {
-          _gpuCache = parseGpuCsv(stdout);
+// Unified async chain: GPU stats + UUID mapping → compute apps
+function refreshGpuChain() {
+  if (_smiChainRunning) return;
+  _smiChainRunning = true;
+  // Step 1: GPU stats
+  execFile('nvidia-smi', GPU_SMI_ARGS, { timeout: 15000 }, (err, stdout) => {
+    if (err) {
+      const s = _gpuCache.length > 0 ? 'fallback' : 'unavailable';
+      if (s !== _gpuState) { dbg('gpu snapshot ' + s + ': ' + (err.message || err)); _gpuState = s; }
+    } else {
+      try {
+        const parsed = parseGpuCsv(stdout);
+        if (parsed.length > 0 || _gpuCache.length === 0) {
+          _gpuCache = parsed;
           _gpuCacheTime = Date.now();
-          if (_gpuState !== 'fresh') { dbg('gpu snapshot fresh (' + _gpuCache.length + ' gpus)'); _gpuState = 'fresh'; }
-        } catch (e) {
-          if (_gpuState !== 'parse-error') { dbg('gpu parse error: ' + e.message); _gpuState = 'parse-error'; }
+          // Build UUID→index/memTotal maps from Step 1 output (eliminates Step 3)
+          _uuidToIdx = {}; _uuidToMem = {};
+          for (const g of parsed) { _uuidToIdx[g.uuid] = g.idx; _uuidToMem[g.uuid] = g.memTotal; }
         }
+        if (_gpuState !== 'fresh') { dbg('gpu snapshot fresh (' + _gpuCache.length + ' gpus)'); _gpuState = 'fresh'; }
+        if (_onGpuReady) { _onGpuReady(); _onGpuReady = null; }
+      } catch (e) {
+        if (_gpuState !== 'parse-error') { dbg('gpu parse error: ' + e.message); _gpuState = 'parse-error'; }
+      }
+    }
+    // Step 2: compute apps (for process GPU tags) — UUID mapping comes from Step 1
+    execFile('nvidia-smi',
+      ['--query-compute-apps=pid,gpu_uuid,used_memory', '--format=csv,noheader,nounits'],
+      { timeout: 15000 }, (err2, appOut) => {
+        _smiChainRunning = false;
+        if (err2 || !appOut.trim()) return;
+        const gpuMap = {};
+        const myUuids = new Set();
+        const uid = process.getuid();
+        for (const line of appOut.trim().split('\n').filter(Boolean)) {
+          const parts = line.split(',').map(s => s.trim());
+          const pid = parseInt(parts[0]);
+          const uuid = parts[1] || '';
+          const vram = parseInt(parts[2]) || 0;
+          if (pid) {
+            if (!gpuMap[pid]) gpuMap[pid] = [];
+            gpuMap[pid].push({ idx: _uuidToIdx[uuid] !== undefined ? _uuidToIdx[uuid] : -1, vram, memTotal: _uuidToMem[uuid] || 0 });
+            try {
+              const status = fs.readFileSync('/proc/' + pid + '/status', 'utf8');
+              const m = status.match(/Uid:\s+(\d+)/);
+              if (m && parseInt(m[1]) === uid) myUuids.add(uuid);
+            } catch { }
+          }
+        }
+        _gpuProcMap = gpuMap;
+        _gpuMyIndices = [...myUuids].map(u => _uuidToIdx[u]).filter(i => i !== undefined).sort((a, b) => a - b);
+        dbg('chain complete \u2014 GPU proc data updated');
+        if (_onChainDone) { _onChainDone(); _onChainDone = null; }
       }
     );
-  }
+  });
+}
+
+function getAllGpus() {
+  refreshGpuChain();
   if (_gpuCacheTime > 0 && Date.now() - _gpuCacheTime > GPU_CACHE_TTL) { _gpuCache = []; _gpuCacheTime = 0; }
   return _gpuCache;
 }
@@ -898,7 +926,7 @@ function getWebviewHtml(nonce, initCfg) {
     } else {
       freeCard.style.display = '';
       freeCard.querySelector('.card-head').style.marginBottom = '0';
-      document.getElementById('gpu-summary').textContent = zh ? '无 GPU' : 'No GPU';
+      document.getElementById('gpu-summary').textContent = d.gpuLoading ? (zh ? '加载中…' : 'Loading…') : (zh ? '无 GPU' : 'No GPU');
       capsElem.style.display = 'none';
       actElem.style.display = 'none';
       gpuBody.style.display = 'none';
@@ -1505,55 +1533,11 @@ function refreshConfigFromSettings() {
   _cfgCache = _readSettingsOnce();
 }
 
-// ── GPU process data async cache ────────────────────────────────────────────
+// ── GPU process data (populated by refreshGpuChain) ─────────────────────────
+let _uuidToIdx = {};        // gpu_uuid → index
+let _uuidToMem = {};        // gpu_uuid → memory.total
 let _gpuProcMap = {};       // pid → [{idx, vram, memTotal}]
 let _gpuMyIndices = [];     // GPU indices used by current user
-let _gpuProcRunning = false;
-
-function refreshGpuProcData() {
-  if (_gpuProcRunning) return;
-  _gpuProcRunning = true;
-  execFile('nvidia-smi',
-    ['--query-compute-apps=pid,gpu_uuid,used_memory', '--format=csv,noheader,nounits'],
-    { timeout: 15000 }, (err1, appOut) => {
-      if (err1 || !appOut.trim()) { _gpuProcRunning = false; _gpuProcMap = {}; _gpuMyIndices = []; return; }
-      execFile('nvidia-smi',
-        ['--query-gpu=index,gpu_uuid,memory.total', '--format=csv,noheader,nounits'],
-        { timeout: 15000 }, (err2, idxOut) => {
-          _gpuProcRunning = false;
-          const uuidToIdx = {}, uuidToMem = {};
-          if (!err2 && idxOut.trim()) {
-            for (const line of idxOut.trim().split('\n').filter(Boolean)) {
-              const [idx, uuid, mt] = line.split(',').map(s => s.trim());
-              uuidToIdx[uuid] = parseInt(idx);
-              uuidToMem[uuid] = parseInt(mt) || 0;
-            }
-          }
-          const gpuMap = {};
-          const myUuids = new Set();
-          const uid = process.getuid();
-          for (const line of appOut.trim().split('\n').filter(Boolean)) {
-            const parts = line.split(',').map(s => s.trim());
-            const pid = parseInt(parts[0]);
-            const uuid = parts[1] || '';
-            const vram = parseInt(parts[2]) || 0;
-            if (pid) {
-              if (!gpuMap[pid]) gpuMap[pid] = [];
-              gpuMap[pid].push({ idx: uuidToIdx[uuid] !== undefined ? uuidToIdx[uuid] : -1, vram, memTotal: uuidToMem[uuid] || 0 });
-              try {
-                const status = fs.readFileSync('/proc/' + pid + '/status', 'utf8');
-                const m = status.match(/Uid:\s+(\d+)/);
-                if (m && parseInt(m[1]) === uid) myUuids.add(uuid);
-              } catch { }
-            }
-          }
-          _gpuProcMap = gpuMap;
-          _gpuMyIndices = [...myUuids].map(u => uuidToIdx[u]).filter(i => i !== undefined).sort((a, b) => a - b);
-        }
-      );
-    }
-  );
-}
 
 function getMyGpuIndices() {
   return _gpuMyIndices;
@@ -1578,8 +1562,7 @@ function getProcessData() {
       }
     }
   } catch { }
-  // Apply cached GPU process data (async-refreshed)
-  refreshGpuProcData();
+  // Apply cached GPU process data (refreshed by refreshGpuChain)
   for (const p of procs) {
     if (_gpuProcMap[p.pid]) {
       p.gpus = _gpuProcMap[p.pid];
@@ -1660,6 +1643,7 @@ class MonitorViewProvider {
         load1: loads[0].toFixed(2), load5: loads[1].toFixed(2), load15: loads[2].toFixed(2),
         mem: { percent: mem.percent, usedStr: fmtSize(mem.used), availStr: fmtSize(mem.avail), totalStr: fmtSize(mem.total) },
         gpus,
+        gpuLoading: gpus.length === 0 && _gpuState === '',
         net: netData,
         ssh: ssh.isSSH ? { isSSH: true, tx: ssh.tx, rx: ssh.rx, txStr: fmtBytes(ssh.rx), rxStr: fmtBytes(ssh.tx) } : { isSSH: false },
         disks,
@@ -1682,6 +1666,10 @@ class MonitorViewProvider {
       if (r) _diskCache = r; else throw 0;
     } catch { try { _diskCache = parseDfOutput(execSync('df -PT --local 2>/dev/null', { timeout: 3000 }).toString(), cfg.diskCfg); } catch { } }
     tick();
+    // When GPU data arrives for the first time, push an immediate update
+    _onGpuReady = () => { if (this._view && !this._paused) tick(); };
+    // When first chain fully completes (process GPU tags ready), push update + procs
+    _onChainDone = () => { if (this._view && !this._paused) { tick(); } };
     this._timer = setInterval(tick, this._interval);
     this._diskTimer = setInterval(() => { refreshDiskCache(getConfig().diskCfg); }, 10000);
 

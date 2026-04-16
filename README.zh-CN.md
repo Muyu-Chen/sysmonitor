@@ -112,6 +112,11 @@
 - NVIDIA GPU 监控需要 `nvidia-smi`
 - SSH 流量监控需要 `ss`（仅远程连接）
 
+## 贡献者
+
+<a href="https://github.com/lcx-0504" title="作者"><img src="https://github.com/lcx-0504.png" width="50" style="border-radius:50%" alt="lcx-0504"/></a>
+<a href="https://github.com/klay7w" title="协助修复 GPU 刷新稳定性"><img src="https://github.com/klay7w.png" width="50" style="border-radius:50%" alt="klay7w"/></a>
+
 ## 许可
 
 [MIT](LICENSE)

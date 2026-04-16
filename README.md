@@ -114,6 +114,11 @@ All settings are accessible via the **Settings** button in the sidebar panel. Yo
 - NVIDIA GPU monitoring requires `nvidia-smi`
 - SSH traffic monitoring requires `ss` (remote connections only)
 
+## Contributors
+
+<a href="https://github.com/lcx-0504" title="Author"><img src="https://github.com/lcx-0504.png" width="50" style="border-radius:50%" alt="lcx-0504"/></a>
+<a href="https://github.com/klay7w" title="Helped fix GPU refresh stability"><img src="https://github.com/klay7w.png" width="50" style="border-radius:50%" alt="klay7w"/></a>
+
 ## License
 
 [MIT](LICENSE)
